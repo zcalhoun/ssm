@@ -11,11 +11,11 @@ Functions:
 
 """
 
-from typing import List
+from typing import List, Tuple
 
 import numpy as np
 
-from .base import State, StateSpaceModel
+from .base import State, StateSpaceModel, DiffuseState
 
 
 class LinearGaussianSSM(StateSpaceModel):
@@ -110,10 +110,58 @@ class LinearGaussianSSM(StateSpaceModel):
         current_state = self.x0
         xi = [self.x0]
         for y in data:
-            current_state = self.predict(current_state)
-            current_state = self.update(current_state, y)
+            if isinstance(current_state, DiffuseState):
+                current_state = self._diffuse(current_state, y)
+            else:
+                current_state = self.predict(current_state)
+                current_state = self.update(current_state, y)
             xi.append(current_state)
         return xi
+
+    def _diffuse(self, xi: DiffuseState, y: np.ndarray) -> State:
+        """This function runs the diffuse Kalman filter."""
+        F_inf = self.H @ xi.diffuse_covariance @ self.H.T
+        F_star = self.H @ xi.covariance @ self.H.T + self.R
+        M_inf = xi.diffuse_covariance @ self.H.T
+        M_star = xi.covariance @ self.H.T
+
+        # check if F_inf == 0
+        if np.all(F_inf == 0):
+            K_0 = self.A @ M_star @ np.linalg.inv(F_star)
+            L_0 = self.A - K_0 @ self.H
+            P_inf = self.A @ xi.diffuse_covariance @ self.A.T
+            P_star = self.A @ xi.covariance @ L_0.T + self.Q
+            v_0 = y - self.H @ xi.mu
+            a_0 = self.A @ xi.mu + K_0 @ v_0
+
+            # for numerical reasons, we check if values are small then return
+            # to regular states
+            if np.all(P_inf < 1e-6):
+                return State(a_0, P_star)
+
+            return xi.copy(a_0, P_star, P_inf)
+
+        F_1 = np.linalg.inv(F_inf)
+        F_2 = -F_1 @ F_star @ F_1
+        K_0 = self.A @ M_inf @ F_1
+        K_1 = self.A @ M_star @ F_1 + self.A @ M_inf @ F_2
+        L_0 = self.A - K_0 @ self.H
+        L_1 = -K_1 @ self.H
+
+        v_0 = y - self.H @ xi.mu
+        a_0 = self.A @ xi.mu + K_0 @ v_0
+
+        P_inf = self.A @ xi.diffuse_covariance @ L_0.T
+        P_star = (
+            self.A @ xi.diffuse_covariance @ L_1.T
+            + self.A @ xi.covariance @ L_0.T
+            + self.Q
+        )
+        # Once the numbers get small, we cut out
+        if np.all(P_inf < 1e-6):
+            return State(a_0, P_star)
+
+        return xi.copy(a_0, P_star, P_inf)
 
     def smooth(self, data: np.ndarray) -> List[State]:
         states = self.filter(data)

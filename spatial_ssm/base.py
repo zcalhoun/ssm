@@ -149,6 +149,38 @@ class StateSpaceModel(ABC):
         """
 
 
+class DiffuseState(State):
+    """Extends the state to have a diffuse covariance"""
+
+    def __init__(
+        self, mu: np.ndarray, covariance: np.ndarray, diffuse_covariance: np.ndarray
+    ) -> None:
+        """Initialize the DiffuseState"""
+        super().__init__(mu, covariance)
+        self.diffuse_covariance = diffuse_covariance
+
+    def copy(
+        self,
+        mu: np.ndarray | None = None,
+        covariance: np.ndarray | None = None,
+        diffuse_covariance: np.ndarray | None = None,
+    ) -> DiffuseState:
+        """Return a copy with the new covariance specified
+
+        Args:
+            P_inf: the new covariance matrix
+
+        Returns:
+            A new DiffuseState object with the new covariance
+        """
+        new_state = super().copy(mu, covariance)
+
+        if diffuse_covariance is not None:
+            new_state.diffuse_covariance = diffuse_covariance
+
+        return new_state
+
+
 class SpatialState(State):
     """The Spatial State class.
 
