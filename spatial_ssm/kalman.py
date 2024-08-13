@@ -49,10 +49,10 @@ class LinearGaussianSSM(StateSpaceModel):
         Raises:
             ValueError: If the dimensions of the matrices are not compatible.
         """
-        self.A = transition_matrix  # pylint: disable=invalid-name
-        self.H = observation_matrix  # pylint: disable=invalid-name
-        self.Q = transition_noise  # pylint: disable=invalid-name
-        self.R = observation_noise  # pylint: disable=invalid-name
+        self.A = transition_matrix
+        self.H = observation_matrix
+        self.Q = transition_noise
+        self.R = observation_noise
 
         if initial_state is None:
             self.x0 = State(np.zeros(self.A.shape[0]), np.eye(self.A.shape[0]))
@@ -76,7 +76,7 @@ class LinearGaussianSSM(StateSpaceModel):
                 + f"{self.Q.shape[0]} of the transition noise matrix."
             )
 
-        if self.H.shape[1] != self.R.shape[0]:
+        if self.H.shape[0] != self.R.shape[0]:
             raise ValueError(
                 f"Observation column size {self.H.shape[1]} does not match "
                 + f"observation noise matrix row size {self.R.shape[0]}."
@@ -92,17 +92,19 @@ class LinearGaussianSSM(StateSpaceModel):
         mu = self.A @ xi.mu
         sigma = self.A @ xi.covariance @ self.A.T + self.Q
 
-        return State(mu, sigma)
+        return xi.copy(mu, sigma)
 
     def update(self, xi: State, y: np.ndarray) -> State:
         v = y - self.H @ xi.mu
+        # Handle missing values
+        v[np.isnan(y)] = 0
         s = self.H @ xi.covariance @ self.H.T + self.R
         k = xi.covariance @ self.H.T @ np.linalg.inv(s)
 
         mu = xi.mu + k @ v
         sigma = xi.covariance - k @ self.H @ xi.covariance
 
-        return State(mu, sigma)
+        return xi.copy(mu, sigma)
 
     def filter(self, data: np.ndarray) -> List[State]:
         current_state = self.x0
@@ -128,7 +130,7 @@ class LinearGaussianSSM(StateSpaceModel):
                 s.covariance + G @ (smoothed[-1].covariance - s_plus.covariance) @ G.T
             )
 
-            smoothed.append(State(mu, sigma))
+            smoothed.append(s.copy(mu, sigma))
 
         return smoothed[::-1]
 

@@ -150,6 +150,17 @@ class StateSpaceModel(ABC):
 
 
 class SpatialState(State):
+    """The Spatial State class.
+
+    This class just adds on the ability to store the coordinates and use those
+    coordinates to fill in the spatial data.
+
+    Attributes:
+        coords: The spatial coordinates.
+        offset: The offset of the spatial state from the full-state
+
+    """
+
     def __init__(self, mu, covariance, coords, offset=0) -> None:
         super().__init__(mu, covariance)
         self.coords = coords
@@ -168,7 +179,7 @@ class SpatialState(State):
     #         return mu
 
     def fill_shape(self, shape: np.ndarray, kernel: Type[Kernel]) -> np.ndarray:
-
+        """Fills in the coordinates with the values based on the state"""
         full = np.indices(shape).reshape(2, -1).T
         K_yx = kernel(full, self.coords)
 
